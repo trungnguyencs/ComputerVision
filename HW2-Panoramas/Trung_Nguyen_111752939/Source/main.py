@@ -310,7 +310,7 @@ def Bonus_perspective_warping(img1, img2, img3):
     out1 = cv2.warpPerspective(
         im2,
         M1, (im1.shape[1], im1.shape[0]),
-        dst=im1.copy() * 0,
+        dst=im1.copy(),
         borderMode=cv2.BORDER_TRANSPARENT)
 
     out_laplacian1 = laplacian_pyramid_blending(im1, out1)
@@ -319,7 +319,7 @@ def Bonus_perspective_warping(img1, img2, img3):
     out2 = cv2.warpPerspective(
         im3,
         M2, (im1.shape[1], im1.shape[0]),
-        dst=out1.copy() * 0,
+        dst=out1.copy(),
         borderMode=cv2.BORDER_TRANSPARENT)
 
     out_laplacian2 = laplacian_pyramid_blending(out2, out_laplacian1)
@@ -456,7 +456,7 @@ def Bonus_cylindrical_warping(img1, img2, img3):
         return ls_
 
     h, w = im1.shape
-    f = 500
+    f = 450
     K = np.array([[f, 0, w / 2], [0, f, h / 2], [0, 0,
                                                  1]])  # mock calibration matrix
 

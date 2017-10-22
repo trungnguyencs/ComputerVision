@@ -36,6 +36,8 @@ def hsv_histogram_for_window(frame, window):
     hsv_roi =  cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv_roi, np.array((0., 60.,32.)), np.array((180.,255.,255.)))
     roi_hist = cv2.calcHist([hsv_roi],[0],mask,[180],[0,180])
+    # cv2.imshow("roi_hist", roi)
+    # cv2.waitKey(0)
     cv2.normalize(roi_hist,roi_hist,0,255,cv2.NORM_MINMAX)
     return roi_hist
 
@@ -50,21 +52,16 @@ def resample(weights):
       indices.append(j-1)
     return indices
 
-Debug_laptop = 1
 def skeleton_tracker(v, file_name):
     # Open output file
-    # output_name = sys.argv[3] + file_name
-    output_name = file_name
+    output_name = sys.argv[3] + file_name
+    # output_name = file_name
     output = open(output_name,"w")
     frameCounter = 0
     # read first frame
-    if Debug_laptop == 0:
-        ret,frame = v.read()
-        if ret == False:
-            return
-    else:
-        if len(v) == 0: return
-        frame = v[0]            # first frame
+
+    ret,frame = v.read()
+    if ret == False: return
 
     # detect face in first frame
     c,r,w,h = detect_one_face(frame)
@@ -74,43 +71,37 @@ def skeleton_tracker(v, file_name):
     output.write("%d,%d,%d\n" % pt) # Write as 0,pt_x,pt_y
     frameCounter = frameCounter + 1
 
-    if output_name == "output_camshift.txt":
-        def CAMshift(faces, frame):
-            # cap = cv2.VideoCapture(0)
-            c, r, w, h = faces
-            track_window = faces
-            # set up the ROI for tracking
-            roi_hist = hsv_histogram_for_window(frame, (c, r, w, h))  # this is provided for you
-            # Setup the termination criteria, either 10 iteration or move by atleast 1 pt
-            term_crit = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1)
+    if file_name == "output_camshift.txt":
+        # cap = cv2.VideoCapture(0)
+        c, r, w, h = faces
+        track_window = faces
+        # set up the ROI for tracking
+        roi_hist = hsv_histogram_for_window(frame, (c, r, w, h))  # this is provided for you
+        # Setup the termination criteria, either 10 iteration or move by atleast 1 pt
+        term_crit = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1)
+
+        while (1):
+            ret, frame = v.read()
+            if ret == False: return
+
+            ## CAMshift
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
             dst = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
             # apply meanshift to get the new location
             ret, track_window = cv2.CamShift(dst, track_window, term_crit)
+            c, r, w, h = track_window
             # Draw it on image
             pts = cv2.boxPoints(ret)
             pts = np.int0(pts)
             img2 = cv2.polylines(frame, [pts], True, 255, 2)
             cv2.imshow('img2', img2)
-            dst_draw = cv2.polylines(dst, [pts], True, 255, 2)
-            # cv2.imshow("BackProject", dst_draw)
-            cv2.waitKey(10)
-            return track_window
-        while (1):
-            if Debug_laptop == 0:
-                ret, frame = v.read()
-                if ret == False: return
-            else:
-                if len(v) == 0: return
-                if frameCounter == len(v): break
-                frame = v[frameCounter]  # read frame
-            ## CAMshift
-            c, r, w, h = CAMshift(faces,frame)
+            cv2.waitKey(25)
+
             pt = (frameCounter, c + w / 2, r + h / 2)
             output.write("%d,%d,%d\n" % pt)  # Write as frame_index,pt_x,pt_y
             frameCounter = frameCounter + 1
 
-    if output_name == "output_kalman.txt":
+    if file_name == "output_kalman.txt":
         ### Kalman Filter
         c, r, w, h = faces
         state = np.array([c + w / 2, r + h / 2, 0, 0], dtype='float64')  # initial position
@@ -127,14 +118,8 @@ def skeleton_tracker(v, file_name):
         kalman.statePost = state
 
         while (1):
-            if Debug_laptop == 0:
-                ret, frame = v.read()
-                if ret == False: return
-            else:
-                if len(v) == 0: return
-                if frameCounter == len(v): break
-                frame = v[frameCounter]  # read frame
-
+            ret, frame = v.read()
+            if ret == False: return
             # perform the tracking
             # e.g. cv2.meanShift, cv2.CamShift, or kalman.predict(), kalman.correct()
             prediction = kalman.predict()
@@ -163,11 +148,8 @@ def skeleton_tracker(v, file_name):
 
             output.write("%d,%d,%d\n" % pt) # Write as frame_index,pt_x,pt_y
             frameCounter = frameCounter + 1
-            
-        cv2.destroyAllWindows()
 
-
-    if output_name == "output_particle.txt":
+    if file_name == "output_particle.txt":
         # a function that, given a particle position, will return the particle's "fitness"
         def particleevaluator(back_proj, particle):
             return back_proj[particle[1], particle[0]]
@@ -175,44 +157,43 @@ def skeleton_tracker(v, file_name):
         # hist_bp: obtain using cv2.calcBackProject and the HSV histogram
 
         roi_hist = hsv_histogram_for_window(frame, (c, r, w, h))  # this is provided for you
+        # cv2.imshow("roi_hist", roi_hist)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         hist_bp = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
 
         n_particles = 200       # 200 particles
         init_pos = np.array([c + w / 2.0, r + h / 2.0], int)  # Initial position
         particles = np.ones((n_particles, 2), int) * init_pos  # Init particles to init same position
-        f = particleevaluator(hist_bp, init_pos) * np.ones(n_particles)  # Evaluate appearance model
-        weights = np.ones(n_particles) / n_particles  # weights are uniform (at first)
 
-
+        # f0 = particleevaluator(hist_bp, init_pos) * np.ones(n_particles)  # Evaluate appearance model
+        # weights = np.ones(n_particles) / n_particles  # weights are uniform (at first)
 
         while (1):
-            if Debug_laptop == 0:
-                ret, frame = v.read()
-                if ret == False: return
-            else:
-                if len(v) == 0: return
-                if frameCounter == len(v): break
-                frame = v[frameCounter]  # read frame
+            ret, frame = v.read()
+            if ret == False: return
 
-                # Tracking:
-            stepsize = 50
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            hist_bp = cv2.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
+
+            # Tracking:
+            stepsize = 8
             # Particle motion model: uniform step (TODO: find a better motion model)
             np.add(particles, np.random.uniform(-stepsize, stepsize, particles.shape), out=particles, casting="unsafe")
 
             # Clip out-of-bounds particles
             # print "image shape: ", frame.shape
             im_h, im_w = frame.shape[0], frame.shape[1]
-
             particles = particles.clip(np.zeros(2), np.array((im_w, im_h)) - 1).astype(int)
 
             f = particleevaluator(hist_bp, particles.T)  # Evaluate particles
+
             weights = np.float32(f.clip(1))  # Weight ~ histogram response
             weights /= np.sum(weights)  # Normalize w
+
             pos = np.sum(particles.T * weights, axis=1).astype(int)  # expected position: weighted average
             # print "pos: ", pos
 
-            if 1. / np.sum(weights ** 2) < n_particles / 2.:  # If particle cloud degenerate:
+            if 1.0 / np.sum(weights ** 2) < n_particles / 2.0:  # If particle cloud degenerate:
                 particles = particles[resample(weights), :]  # Resample particles according to weights
                 # resample() function is provided for you
 
@@ -222,124 +203,109 @@ def skeleton_tracker(v, file_name):
 
             pt = (frameCounter,pos[0], pos[1])
             cv2.imshow('particle', frame)
-            cv2.waitKey(25)
+            cv2.waitKey(10)
 
             output.write("%d,%d,%d\n" % pt) # Write as frame_index,pt_x,pt_y
             frameCounter = frameCounter + 1
 
-        cv2.destroyAllWindows()
-
-    if output_name == "output_of.txt":
+    if file_name == "output_of.txt":
 
         # params for ShiTomasi corner detection
-        feature_params = dict( maxCorners = 100,
-                               qualityLevel = 0.05,
-                               minDistance = 7,
-                               blockSize = 7 )
+        feature_params = dict(maxCorners=100,
+                              qualityLevel=0.05,
+                              minDistance=7,
+                              blockSize=7)
         # Parameters for lucas kanade optical flow
-        lk_params = dict( winSize  = (15,15),
-                          maxLevel = 2,
-                          criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+        lk_params = dict(winSize=(15, 15),
+                         maxLevel=2,
+                         criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
         # Create some random colors
-        color = np.random.randint(0,255,(100,3))
+        color = np.random.randint(0, 255, (100, 3))
 
-        # read first frame
-        old_frame = v[0]
-        frameCounter = 0
+        # ret, frame = v.read()
+        old_frame = frame       # first frame
 
         # detect face in first frame
-        c,r,w,h = detect_one_face(old_frame)
-        faces = (c,r,w,h)
-        pt = (frameCounter, c+w/2, r+h/2)
-        output.write("%d,%d,%d\n" % pt)  
-        frameCounter = frameCounter + 1
+        c, r, w, h = detect_one_face(old_frame)
+        faces = (c, r, w, h)
+
+        # pt = (frameCounter, c + w / 2, r + h / 2)
+        # output.write("%d,%d,%d\n" % pt)
+        # frameCounter = frameCounter + 1
 
         # Take first frame and find corners in it
         old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
 
         roi = np.zeros(old_gray.shape)
-        roi[r:r+h,c:c+w] = 1
+        roi[r:r + h, c:c + w] = 1
 
-        p0 = cv2.goodFeaturesToTrack(old_gray, mask = np.uint8(roi), **feature_params)
+        p0 = cv2.goodFeaturesToTrack(old_gray, mask=np.uint8(roi), **feature_params)
 
         # Create a mask image for drawing purposes
         mask = np.zeros_like(old_frame)
 
         while (1):
-            if frameCounter == len(v): break
-            
-            frame = v[frameCounter]  # read frame
+            ret, frame = v.read()
+            if ret == False: return
+
+            # frame = v[frameCounter]  # read frame
             frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            
+
             # calculate optical flow
             p1, st, err = cv2.calcOpticalFlowPyrLK(old_gray, frame_gray, p0, None, **lk_params)
-            
-            # Select good points    
-            good_old = p0[st==1]
-            good_new = p1[st==1]
+
+            # Select good points
+            good_old = p0[st == 1]
+            good_new = p1[st == 1]
             average_point = np.uint8(np.average(good_new, axis=0))
             pt = (frameCounter, average_point[0], average_point[1])
-            output.write("%d,%d,%d\n" % pt)  
-                
+            output.write("%d,%d,%d\n" % pt)
+
             # draw the tracks
-            for i,(new,old) in enumerate(zip(good_new,good_old)):
-                a,b = new.ravel()
-                c,d = old.ravel()
-                mask = cv2.line(mask, (a,b),(c,d), color[i].tolist(), 2)
-                frame = cv2.circle(frame,(a,b),5,color[i].tolist(),-1)
-            img = cv2.add(frame,mask)
-            cv2.imshow('frame',img)
-            k = cv2.waitKey(30) & 0xff
+            for i, (new, old) in enumerate(zip(good_new, good_old)):
+                a, b = new.ravel()
+                c, d = old.ravel()
+                mask = cv2.line(mask, (a, b), (c, d), color[i].tolist(), 2)
+                frame = cv2.circle(frame, (a, b), 5, color[i].tolist(), -1)
+            img = cv2.add(frame, mask)
+            cv2.imshow('frame', img)
+            k = cv2.waitKey(10) & 0xff
             if k == 27:
                 break
-                
+
             # Now update the previous frame and previous points
             old_gray = frame_gray.copy()
-            p0 = good_new.reshape(-1,1,2)
+            p0 = good_new.reshape(-1, 1, 2)
             frameCounter = frameCounter + 1
-            
+
         cv2.destroyAllWindows()
 
         output.close()
 
-# output_camshift.txt
-# output_particle.txt
-# output_kalman.txt
-# Bonus: output_of.txt
+    output.close()
 
-filename = "02-1.avi"
-if Debug_laptop:
-    import skvideo.io
-    v = skvideo.io.vread(filename)
-else:
-    v = cv2.VideoCapture(filename)
 
-skeleton_tracker(v, "output_camshift.txt")
-skeleton_tracker(v, "output_kalman.txt")
-skeleton_tracker(v, "output_particle.txt")
-skeleton_tracker(v, "output_of.txt")
+if __name__ == '__main__':
+    question_number = -1
 
-# if __name__ == '__main__':
-#     question_number = -1
+    # Validate the input arguments
+    if (len(sys.argv) != 4):
+        help_message()
+        sys.exit()
+    else:
+        question_number = int(sys.argv[1])
+        if (question_number > 4 or question_number < 1):
+            print("Input parameters out of bound ...")
+            sys.exit()
 
-#     # Validate the input arguments
-#     if (len(sys.argv) != 4):
-#         help_message()
-#         sys.exit()
-#     else:
-#         question_number = int(sys.argv[1])
-#         if (question_number > 4 or question_number < 1):
-#             print("Input parameters out of bound ...")
-#             sys.exit()
+    # read video file
+    video = cv2.VideoCapture(sys.argv[2]);
 
-#     # read video file
-#     video = cv2.VideoCapture(sys.argv[2]);
-
-#     if (question_number == 1):
-#         skeleton_tracker(video, "output_camshift.txt")
-#     elif (question_number == 2):
-#         skeleton_tracker(video, "output_particle.txt")
-#     elif (question_number == 3):
-#         skeleton_tracker(video, "output_kalman.txt")
-#     elif (question_number == 4):
-#         skeleton_tracker(video, "output_of.txt")
+    if (question_number == 1):
+        skeleton_tracker(video, "output_camshift.txt")
+    elif (question_number == 2):
+        skeleton_tracker(video, "output_particle.txt")
+    elif (question_number == 3):
+        skeleton_tracker(video, "output_kalman.txt")
+    elif (question_number == 4):
+        skeleton_tracker(video, "output_of.txt")

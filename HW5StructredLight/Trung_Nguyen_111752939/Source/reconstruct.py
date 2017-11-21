@@ -155,7 +155,7 @@ def reconstruct_from_binary_patterns():
     #-------------------BONUS PART-----------------------
     colors = colors[mask]
     output_color = np.hstack([points_3d[:,0,:], colors])
-    output_name = "output_color.xyzrgb"
+    output_name = "output_color.xyz"
     with open(output_name,"w") as f:
         for p in output_color:
             f.write("%d %d %d %d %d %d\n"%(p[0],p[1],p[2],p[5],p[4],p[3]))
